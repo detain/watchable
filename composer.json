@@ -1,0 +1,57 @@
+{
+    "name": "detain/watchable",
+    "description": " 🎞 Get information📽 on all things 📺watchable such as 🎥Movies, 🎬TV Series, and 📹Anime Series📼 ",
+    "type": "project",
+    "license": "GPL-3.0",
+    "authors": [
+        {
+            "name": "Joe Huss",
+            "email": "detain@interserver.net"
+        }
+    ],
+    "minimum-stability": "dev",
+    "require": {
+        "php": ">=5.4.0",
+        "ext-curl": "*",
+        "fabpot/goutte": "*",
+        "react/http-client": "*",
+        "react/mysql": "*",
+        "rubix/ml": "dev-master",
+        "masterminds/html5": "*",
+        "matto1990/lastfm-api": "dev-master",
+        "monolog/monolog": "*",
+        "php-ffmpeg/extras": "dev-master",
+        "php-ffmpeg/php-ffmpeg": "*",
+        "aminyazdanpanah/php-ffmpeg-video-streaming": "dev-master",
+        "imdbphp/imdbphp": "*",
+        "bhutanio/movietvdb": "*",
+        "php-tmdb/api": "*",
+        "pxgamer/yts": "*",
+        "nikic/fast-route": "*",
+        "twig/twig": "*",
+        "php-ai/php-ml": "dev-master",
+        "roave/security-advisories": "dev-master",
+        "workerman/mysql": "*",
+        "loilo/fuse": "*",
+        "teamtnt/tntsearch": "*"
+    },
+    "suggest": {
+        "nikic/php-parser": "*",
+        "oefenweb/damerau-levenshtein": "*",
+        "lucascavalcante/fuzzy-search": "*",
+        "wyndow/fuzzywuzzy": "*"
+    },
+    "autoload": {
+        "psr-4": {
+            "Detain\\Watchable\\": "src/",
+            "Detain\\Watchable\\Web\\": "public/"
+        }
+    },
+    "require-dev": {
+    },
+    "config": {
+        "allow-plugins": {
+            "kylekatarnls/update-helper": true
+        }
+    }
+}
