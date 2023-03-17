@@ -1,7 +1,52 @@
 <?php
-require_once __DIR__.'/../../vendor/autoload.php';
-require_once __DIR__.'/inc.php';
-$torrents = loadJson('torrentfiles');
+require_once __DIR__.'/../../../vendor/autoload.php';
+include 'Torrent.php';
+$yts = json_decode(file_get_contents('yts.json'),true);
+$torrents = json_decode(file_get_contents('torrent_videos.json'),true);
+$found = [];
+$links = [];
+$hashes = [];
+foreach ($yts as $ytsId => $ytsData) {
+    if (isset($ytsData['torrents'])) {
+        foreach ($ytsData['torrents'] as $torData) {
+            $hashes[$torData['hash']] = $ytsId;
+        }
+    }
+}
+foreach (explode("\n", trim(`ssh vaultd find /storage -type f`)) as $fileName) {
+    if (preg_match('/\.(mpeg|mpg|flv|divx|ogm|m4v|avi|iso|mkv|mp4)$/i', $fileName)) {
+        $fileSlug = strtolower(basename($fileName));
+        if (array_key_exists($fileSlug, $torrents)) {
+            $found[$fileName] = $torrents[$fileSlug];
+        }
+    }
+}
+echo "found ".count($found)." matches\n";
+foreach ($found as $fileName => $hash) {
+    $ytsId = $hashes[$hash];
+    $ytsData = $yts[$ytsId];
+    foreach ($ytsData['torrents'] as $torData) {
+        if ($torData['hash'] == $hash)
+            break;
+    }
+    $tor = new Torrent('tor/'.$hash);
+    $torFiles = $tor->content();
+    foreach ($torFiles as $torFile => $fileSize) {
+        if (strtolower(basename($torFile)) == strtolower(basename($fileName))) {
+            $links[$fileName] = $torFile;
+        }
+    }
+}
+file_put_contents('data.json', json_encode([
+    'hashes' => $hashes,
+    'found' => $found,
+    'links' => $links,
+], JSON_PRETTY_PRINT));
+print_r($links);
+echo "found ".count($links)." links\n";
+exit;
+
+
 $torrentPathInfos = [];
 echo 'Mapping Torrent PathInfo Responses to Torrents';
 foreach ($torrents as $torrentId => $torrentFiles) {
@@ -49,18 +94,18 @@ foreach ($files as $fileFullName => $fileData) {
                         $found = true;
                         echo '+S';
                     }
-                } 
+                }
             }
         }
         if ($found == false) {
             echo '-';
         }
         echo PHP_EOL;
-    }    
+    }
     if (isset($fileData['torrent_id']) && isset($hashs[$fileData['torrent_id']])) {
         $files[$fileFullName]['yts_id'] = $hashs[$fileData['torrent_id']];
         if (isset($yts[$files[$fileFullName]['yts_id']]['imdb_code'])) {
-            $files[$fileFullName]['imdb_id'] = preg_replace('/^tt/', '', $yts[$files[$fileFullName]['yts_id']]['imdb_code']); 
+            $files[$fileFullName]['imdb_id'] = preg_replace('/^tt/', '', $yts[$files[$fileFullName]['yts_id']]['imdb_code']);
         }
     }
 }
