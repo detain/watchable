@@ -162,7 +162,8 @@ if ($load['show'] == true) {
         $showIdx++;
         $url = $sitePrefix.'/shows/'.$id.'/'.$show['seo'].'/';
         $crawler = $client->request('GET', $url);
-        $show['image'] = $sitePrefix.$crawler->filter('.show_info_main_logo img')->attr('src');
+        if ($crawler->filter('.show_info_main_logo img')->count() > 0)
+            $show['image'] = $sitePrefix.$crawler->filter('.show_info_main_logo img')->attr('src');
         $show['description'] = $crawler->filter('.show_info_banner_logo')->text();
         if ($crawler->filter('.show_info_rating_score a')->count() > 0)
             $show['imdb'] = $crawler->filter('.show_info_rating_score a')->attr('href');
