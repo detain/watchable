@@ -148,23 +148,52 @@ if ($load['packs'] == true) {
     file_put_contents('eztv.json', json_encode($data, JSON_PRETTY_PRINT |  JSON_UNESCAPED_UNICODE |  JSON_UNESCAPED_SLASHES));
 }
 if ($load['show'] == true) {
-/*
-"271007": {
+    /*
+    "271007": {
     "name": "$50K Three Ways",
     "seo": "50k-three-ways",
     "status": "ended",
     "rating": 8.7,
     "votes": 24
-},*/
+    },*/
     $showCount = count($data['shows']);
     $showIdx = 0;
+    $maxTries = 5;
+    $tryDelay = 10;
+    $skip = false;
+    $totalRetries = 0;
+    $totalFailed = 0;
     foreach ($data['shows'] as $id => $show) {
         $showIdx++;
+        $tries = 0;
+        if ($skip !== false && $skip > $showIdx) {
+            echo "Skipping id {$id}: {$skipIdx}/{$skip} skipped\n";
+            continue;
+        }
         $url = $sitePrefix.'/shows/'.$id.'/'.$show['seo'].'/';
         $crawler = $client->request('GET', $url);
+        $code = $client->getResponse()->getStatusCode();
+        if ($code != 200) {
+            while ($code != 200 && $tries < $maxTries) {
+                echo "URL {$url} got error code {$code}, retry {$tries}/{$maxTries} tries after a {$tryDelay}sec delay...";
+                sleep($tryDelay);
+                echo "woke up, retrying\n";
+                $tries++;
+                $totalRetries++;
+                $crawler = $client->request('GET', $url);
+                $code = $client->getResponse()->getStatusCode();
+            }
+            if ($code != 200) {
+                echo "Couldnt get URL {$url} after {$tries} attempts, skipping!\n";
+                $totalFailed++;
+                continue;
+            }
+        }
         if ($crawler->filter('.show_info_main_logo img')->count() > 0)
             $show['image'] = $sitePrefix.$crawler->filter('.show_info_main_logo img')->attr('src');
-        $show['description'] = $crawler->filter('.show_info_banner_logo')->text();
+        if ($crawler->filter('.show_info_banner_logo')->count() > 0) {
+            $show['description'] = $crawler->filter('.show_info_banner_logo')->text();
+        }
         if ($crawler->filter('.show_info_rating_score a')->count() > 0)
             $show['imdb'] = $crawler->filter('.show_info_rating_score a')->attr('href');
         $show['torrents'] = [];
@@ -174,10 +203,13 @@ if ($load['show'] == true) {
             for ($idx = 0; $idx < $idxMax; $idx++)
                 $show['torrents'][] = intval(explode('/', $rows->eq($idx)->attr('href'))[2]);
         $show['cast'] = [];
-        $castHtml = explode('<br>', $crawler->filter('.show_info_tvnews_column > div > table > tr > td')->html());
-        foreach ($castHtml as $cast) {
-            if (preg_match('/name[^>]*>([^<]*).*as (.*)/u', $cast, $matches)) {
-                $show['cast'][$matches[1]] = $matches[2];
+        $td = $crawler->filter('.show_info_tvnews_column > div > table > tr > td');
+        if ($td->count() > 0) {
+            $castHtml = explode('<br>', $td->html());
+            foreach ($castHtml as $cast) {
+                if (preg_match('/name[^>]*>([^<]*).*as (.*)/u', $cast, $matches)) {
+                    $show['cast'][$matches[1]] = $matches[2];
+                }
             }
         }
         $show['other'] = [];
@@ -198,10 +230,11 @@ if ($load['show'] == true) {
                     $show['imdb'] = $link;
                 elseif (stripos($link, 'tvmaze') !== false)
                     $show['tvmaze'] = $link;
-            }
+        }
         echo "[{$showIdx}]/{$showCount}] Show {$id} \n"; //.json_encode($show, JSON_PRETTY_PRINT)."\n";
         $data['shows'][$id] = $show;
     }
     echo 'done, found '.count($data['shows']).' shows'.PHP_EOL;
+    echo "Total Retries '{$totalRetries}', Total Failed '{$totalFailed}'\n";
     file_put_contents('eztv.json', json_encode($data, JSON_PRETTY_PRINT |  JSON_UNESCAPED_UNICODE |  JSON_UNESCAPED_SLASHES));
 }
