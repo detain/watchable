@@ -156,12 +156,16 @@ if ($load['show'] == true) {
     "rating": 8.7,
     "votes": 24
 },*/
+    $showCount = count($data['shows']);
+    $showIdx = 0;
     foreach ($data['shows'] as $id => $show) {
+        $showIdx++;
         $url = $sitePrefix.'/shows/'.$id.'/'.$show['seo'].'/';
         $crawler = $client->request('GET', $url);
         $show['image'] = $sitePrefix.$crawler->filter('.show_info_main_logo img')->attr('src');
         $show['description'] = $crawler->filter('.show_info_banner_logo')->text();
-        $show['imdb'] = $crawler->filter('.show_info_rating_score a')->attr('href');
+        if ($crawler->filter('.show_info_rating_score a')->count() > 0)
+            $show['imdb'] = $crawler->filter('.show_info_rating_score a')->attr('href');
         $show['torrents'] = [];
         $rows = $torrents = $crawler->filter('a.epinfo');
         $idxMax = $rows->count();
@@ -178,11 +182,12 @@ if ($load['show'] == true) {
         $show['other'] = [];
         $parts = explode('<div class="showinfo_header">', $crawler->filter('.show_info_description > tr:nth-child(2) td:nth-child(1)')->html());
         array_shift($parts);
-        $parts[0] = str_replace('<div style="width: 537px; height: 250px; overflow-y: auto;">', '', $parts[0]);
-        foreach ($parts as $part)
-            if (preg_match_all('/<h3>([^<]*)<\/h3><\/div>(<br>.*)<br>/msu', $part, $matches))
-                $show['other'][$matches[1][0]] = explode('<br>', $matches[2][0]);
-        print_r($show['other']);
+        if (count($parts) > 0) {
+            $parts[0] = str_replace('<div style="width: 537px; height: 250px; overflow-y: auto;">', '', $parts[0]);
+            foreach ($parts as $part)
+                if (preg_match_all('/<h3>([^<]*)<\/h3><\/div>(<br>.*)<br>/msu', $part, $matches))
+                    $show['other'][$matches[1][0]] = explode('<br>', $matches[2][0]);
+        }
         $links = $crawler->filter('.show_info_description > tr:nth-child(2) td:nth-child(1) a');
         $idxMax = $links->count();
         if ($idxMax > 0)
@@ -193,7 +198,7 @@ if ($load['show'] == true) {
                 elseif (stripos($link, 'tvmaze') !== false)
                     $show['tvmaze'] = $link;
             }
-        echo "Show {$id} ".json_encode($show, JSON_PRETTY_PRINT)."\n";
+        echo "[{$showIdx}]/{$showCount}] Show {$id} \n"; //.json_encode($show, JSON_PRETTY_PRINT)."\n";
         $data['shows'][$id] = $show;
     }
     echo 'done, found '.count($data['shows']).' shows'.PHP_EOL;
