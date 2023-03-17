@@ -28,11 +28,10 @@
         "php-tmdb/api": "*",
         "nikic/fast-route": "*",
         "twig/twig": "*",
-        "php-ai/php-ml": "dev-master",
         "roave/security-advisories": "dev-master",
         "workerman/mysql": "*",
         "loilo/fuse": "*",
-        "teamtnt/tntsearch": "*"
+        "http-interop/http-factory-guzzle": "dev-master"
     },
     "suggest": {
         "nikic/php-parser": "*",
@@ -50,7 +49,8 @@
     },
     "config": {
         "allow-plugins": {
-            "kylekatarnls/update-helper": true
+            "kylekatarnls/update-helper": true,
+            "php-http/discovery": true
         }
     }
 }

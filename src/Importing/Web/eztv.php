@@ -39,7 +39,7 @@ $load = [
     'packs' => false,
     'show' => true,
 ];
-$sitePrefix = 'https://eztv.re';
+$sitePrefix = 'http://eztv.re';
 $converter = new CssSelectorConverter();
 $client = new Goutte\Client();
 if (file_exists('eztv.json')) {
@@ -57,7 +57,7 @@ if ($load['torrents'] == true) {
     echo 'Loading Torrents:';
     for ($limit = 100, $pages = 0, $page = 1, $end = false; $end == false; $page++) {
         echo "{$page}/{$pages}, ";
-        //$json = json_decode(file_get_contents('https://eztv.re/api/get-torrents?limit=100&page='.$page),true);
+        //$json = json_decode(file_get_contents('http://eztv.re/api/get-torrents?limit=100&page='.$page),true);
         $json = json_decode(file_get_contents('torrents_page_'.$page.'.json'),true);
         if (!isset($json['torrents_count']))
             continue;
@@ -169,10 +169,12 @@ if ($load['show'] == true) {
             for ($idx = 0; $idx < $idxMax; $idx++)
                 $show['torrents'][] = intval(explode('/', $rows->eq($idx)->attr('href'))[2]);
         $show['cast'] = [];
-        preg_match_all('/<div itemprop="actor" itemscope itemtype="http:\/\/schema.org\/Person" style="display: inline;"><span itemprop="name">(?P<actor>[^<]*)<\/span><\/div> \.* as (?P<plays>[^<]*)<br \/>/msuU',
-            $crawler->filter('.show_info_tvnews_column > div > table > tr > td')->html(), $matches);
-        foreach ($matches['actor'] as $idx => $actor)
-            $show['cast'][$actor] = $matches['plays'][$idx];
+        $castHtml = explode('<br>', $crawler->filter('.show_info_tvnews_column > div > table > tr > td')->html());
+        foreach ($castHtml as $cast) {
+            if (preg_match('/name[^>]*>([^<]*).*as (.*)/u', $cast, $matches)) {
+                $show['cast'][$matches[1]] = $matches[2];
+            }
+        }
         $show['other'] = [];
         $parts = explode('<div class="showinfo_header">', $crawler->filter('.show_info_description > tr:nth-child(2) td:nth-child(1)')->html());
         array_shift($parts);
@@ -180,10 +182,11 @@ if ($load['show'] == true) {
         foreach ($parts as $part)
             if (preg_match_all('/<h3>([^<]*)<\/h3><\/div>(<br>.*)<br>/msu', $part, $matches))
                 $show['other'][$matches[1][0]] = explode('<br>', $matches[2][0]);
+        print_r($show['other']);
         $links = $crawler->filter('.show_info_description > tr:nth-child(2) td:nth-child(1) a');
         $idxMax = $links->count();
         if ($idxMax > 0)
-            for ($idx = 0; $idx < $idxMax; $idxMax++) {
+            for ($idx = 0; $idx < $idxMax; $idx++) {
                 $link = $links->eq($idx)->attr('href');
                 if (stripos($link, 'imdb') !== false)
                     $show['imdb'] = $link;
