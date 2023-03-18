@@ -118,7 +118,7 @@ if ($load['shows'] == true) {
         $data['shows'][$id] = $show;
     }
     echo 'done, found '.count($data['shows']).' tv series'.PHP_EOL;
-    file_put_contents($jsonFile, json_encode($data['shows'], JSON_PRETTY_PRINT |  JSON_UNESCAPED_UNICODE |  JSON_UNESCAPED_SLASHES));
+    file_put_contents($jsonFile, json_encode($data, JSON_PRETTY_PRINT |  JSON_UNESCAPED_UNICODE |  JSON_UNESCAPED_SLASHES));
 }
 if ($load['show'] == true) {
     /*
