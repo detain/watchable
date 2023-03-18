@@ -1,33 +1,5 @@
 <?php
-/*
-Torrent
-"1930781": {
-"hash": "82bf89cbe3d452492de7f92e6130ff6291ff04e4",
-"filename": "Ex.on.the.Beach.US.S06E06.HDTV.x264-CRiMSON[eztv.re].mkv",
-"imdb_id": "8285922",
-"season": 6,
-"episode": 6,
-"seeds": 0,
-"peers": 0,
-"name": "Ex on the Beach US S06E06 HDTV x264-CRiMSON EZTV",
-"seo": "ex-on-the-beach-us-s06e06-hdtv-x264-crimson",
-"released": 1679027060,
-"size": 270371477,
-"image": "//ezimg.ch/thumbs/ex-on-the-beach-us-s06e06-hdtv-x264-crimson-large.jpg",
-"magnet": "magnet:?xt=urn:btih:82bf89cbe3d452492de7f92e6130ff6291ff04e4&dn=Ex.on.the.Beach.US.S06E06.HDTV.x264-CRiMSON%5Beztv%5D&tr=udp://tracker.opentrackr.org:1337/announce&tr=udp://9.rarbg.me:2970/announce&tr=udp://p4p.arenabg.com:1337/announce&tr=udp://tracker.torrent.eu.org:451/announce&tr=udp://tracker.dler.org:6969/announce&tr=udp://open.stealth.si:80/announce&tr=udp://ipv4.tracker.harry.lu:80/announce&tr=https://opentracker.i2p.rocks:443/announce",
-"torrent": "https://zoink.ch/torrent/Ex.on.the.Beach.US.S06E06.HDTV.x264-CRiMSON[eztv.re].mkv.torrent"
-},
-Pack
-"507114": {
-"name": "Class of 07 S01 WEBRip x264-ION10",
-"seo": "class-of-07",
-"size": 2576980378,
-"seeds": 86,
-"torrent_id": 1930659,
-"magnet": "magnet:?xt=urn:btih:366c52c0f19356de38229069496170f4ef493539&dn=Class.of.07.S01.WEBRip.x264-ION10%5Beztv.re%5D%5Beztv%5D&tr=udp%3A%2F%2Ftracker.coppersurfer.tk%3A80&tr=udp%3A%2F%2Fglotorrents.pw%3A6969%2Fannounce&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce&tr=udp%3A%2F%2Fexodus.desync.com%3A6969",
-"torrent": "https://zoink.ch/torrent/Class.of.07.S01.WEBRip.x264-ION10[eztv.re].torrent"
-},
-*/
+
 use Symfony\Component\DomCrawler\Crawler;
 use Symfony\Component\CssSelector\CssSelectorConverter;
 
@@ -35,22 +7,23 @@ require_once __DIR__.'/../../../vendor/autoload.php';
 
 $load = [
     'torrents' => false,
-    'shows' => false,
     'packs' => false,
+    'shows' => true,
     'show' => true,
 ];
 $sitePrefix = 'http://eztv.re';
 $converter = new CssSelectorConverter();
 $client = new Goutte\Client();
-if (file_exists('eztv.json')) {
+$jsonFile = 'eztv_shows.json';
+if (file_exists($jsonFile)) {
     echo "Loading data...";
-    $data = json_decode(file_get_contents('eztv.json'),true);
+    $data = json_decode(file_get_contents($jsonFile),true);
     echo "Loaded\n";
 } else {
     $data = [
         'shows' => [],
-        'torrents' => [],
         'packs' => [],
+        'torrents' => [],
     ];
 }
 if ($load['torrents'] == true) {
@@ -91,30 +64,7 @@ if ($load['torrents'] == true) {
         }
     }
     echo 'done, found '.count($data['torrents']).' tv series'.PHP_EOL;
-    file_put_contents('eztv.json', json_encode($data, JSON_PRETTY_PRINT |  JSON_UNESCAPED_UNICODE |  JSON_UNESCAPED_SLASHES));
-}
-if ($load['shows'] == true) {
-    echo 'Loading Shows:';
-    $crawler = $client->request('GET', $sitePrefix.'/showlist/');
-    $rows = $crawler->filter('.forum_header_border tr');
-    echo "Adding ".$rows->count()." Shows";
-    for ($idx = 4, $maxIdx = $rows->count(); $idx < $maxIdx; $idx++) {
-        $row = $rows->eq($idx);
-        $td = $row->filter('td');
-        $href = explode('/', $td->filter('a')->attr('href'));
-        $id = intval($href[2]);
-        $show = [
-            'name' => $td->filter('a')->text(),
-            'seo' => $href[3],
-            'status' => $td->filter('font')->attr('class'),
-            'rating' => floatval($td->filter('b')->text()),
-            'votes' => intval(preg_replace('/[^0-9]/', '', $td->filter('span')->text()))
-        ];
-        //echo "Adding Show {$id} ".json_encode($show)."\n";
-        $data['shows'][$id] = $show;
-    }
-    echo 'done, found '.count($data['shows']).' tv series'.PHP_EOL;
-    file_put_contents('eztv.json', json_encode($data, JSON_PRETTY_PRINT |  JSON_UNESCAPED_UNICODE |  JSON_UNESCAPED_SLASHES));
+    file_put_contents($jsonFile, json_encode($data, JSON_PRETTY_PRINT |  JSON_UNESCAPED_UNICODE |  JSON_UNESCAPED_SLASHES));
 }
 if ($load['packs'] == true) {
     echo 'Loading Packs:';
@@ -145,7 +95,30 @@ if ($load['packs'] == true) {
         }
     }
     echo 'done, found '.count($data['packs']).' tv packs'.PHP_EOL;
-    file_put_contents('eztv.json', json_encode($data, JSON_PRETTY_PRINT |  JSON_UNESCAPED_UNICODE |  JSON_UNESCAPED_SLASHES));
+    file_put_contents($jsonFile, json_encode($data, JSON_PRETTY_PRINT |  JSON_UNESCAPED_UNICODE |  JSON_UNESCAPED_SLASHES));
+}
+if ($load['shows'] == true) {
+    echo 'Loading Shows:';
+    $crawler = $client->request('GET', $sitePrefix.'/showlist/');
+    $rows = $crawler->filter('.forum_header_border tr');
+    echo "Adding ".$rows->count()." Shows";
+    for ($idx = 4, $maxIdx = $rows->count(); $idx < $maxIdx; $idx++) {
+        $row = $rows->eq($idx);
+        $td = $row->filter('td');
+        $href = explode('/', $td->filter('a')->attr('href'));
+        $id = intval($href[2]);
+        $show = [
+            'name' => $td->filter('a')->text(),
+            'seo' => $href[3],
+            'status' => $td->filter('font')->attr('class'),
+            'rating' => floatval($td->filter('b')->text()),
+            'votes' => intval(preg_replace('/[^0-9]/', '', $td->filter('span')->text()))
+        ];
+        //echo "Adding Show {$id} ".json_encode($show)."\n";
+        $data['shows'][$id] = $show;
+    }
+    echo 'done, found '.count($data['shows']).' tv series'.PHP_EOL;
+    file_put_contents($jsonFile, json_encode($data['shows'], JSON_PRETTY_PRINT |  JSON_UNESCAPED_UNICODE |  JSON_UNESCAPED_SLASHES));
 }
 if ($load['show'] == true) {
     /*
@@ -192,7 +165,7 @@ if ($load['show'] == true) {
         if ($crawler->filter('.show_info_main_logo img')->count() > 0)
             $show['image'] = $sitePrefix.$crawler->filter('.show_info_main_logo img')->attr('src');
         if ($crawler->filter('.show_info_banner_logo')->count() > 0) {
-            $show['description'] = $crawler->filter('.show_info_banner_logo')->text();
+            $show['description'] = trim($crawler->filter('.show_info_banner_logo')->text());
         }
         if ($crawler->filter('.show_info_rating_score a')->count() > 0)
             $show['imdb'] = $crawler->filter('.show_info_rating_score a')->attr('href');
@@ -205,21 +178,43 @@ if ($load['show'] == true) {
         $show['cast'] = [];
         $td = $crawler->filter('.show_info_tvnews_column > div > table > tr > td');
         if ($td->count() > 0) {
-            $castHtml = explode('<br>', $td->html());
+            $castHtml = explode('<br>', trim($td->html()));
             foreach ($castHtml as $cast) {
                 if (preg_match('/name[^>]*>([^<]*).*as (.*)/u', $cast, $matches)) {
                     $show['cast'][$matches[1]] = $matches[2];
                 }
             }
         }
-        $show['other'] = [];
         $parts = explode('<div class="showinfo_header">', $crawler->filter('.show_info_description > tr:nth-child(2) td:nth-child(1)')->html());
         array_shift($parts);
         if (count($parts) > 0) {
             $parts[0] = str_replace('<div style="width: 537px; height: 250px; overflow-y: auto;">', '', $parts[0]);
-            foreach ($parts as $part)
-                if (preg_match_all('/<h3>([^<]*)<\/h3><\/div>(<br>.*)<br>/msu', $part, $matches))
-                    $show['other'][$matches[1][0]] = explode('<br>', $matches[2][0]);
+            foreach ($parts as $part) {
+                if (preg_match_all('/<h3>([^<]*)<\/h3><\/div>(<br>.*)<br>/msu', $part, $matches)) {
+                    $type = $matches[1][0];
+                    $typeData = $matches[2][0];
+                    // make sure this follows the expected format
+                    if (strtolower(substr($type, 0, strlen($show['name']))) == strtolower($show['name'])) {
+                        $type = substr($type, strlen($show['name'])+3);
+                    }
+                    $type = strtolower($type);
+                    if ($type == "general information") {
+                        $typeData = explode('<br>', $typeData);
+                        foreach ($typeData as $typeRow) {
+                            if (preg_match('/^([^:]*): (.*)$/ui', $typeRow, $matches)) {
+                                $key = strtolower($matches[1]);
+                                if ($key == 'series premiere')
+                                    $key = 'start_date';
+                                $value = $key == 'genre' ? explode(' | ', $matches[2]) : $matches[2];
+                                $show[$key] = $value;
+                            }
+                        }
+                    } else {
+                        $show[$type] = $typeData;
+                    }
+
+                }
+            }
         }
         $links = $crawler->filter('.show_info_description > tr:nth-child(2) td:nth-child(1) a');
         $idxMax = $links->count();
@@ -231,10 +226,10 @@ if ($load['show'] == true) {
                 elseif (stripos($link, 'tvmaze') !== false)
                     $show['tvmaze'] = $link;
         }
-        echo "[{$showIdx}]/{$showCount}] Show {$id} \n"; //.json_encode($show, JSON_PRETTY_PRINT)."\n";
+        echo "[{$showIdx}]/{$showCount}] Show {$id}\n ";//.json_encode($show, JSON_PRETTY_PRINT)."\n";
         $data['shows'][$id] = $show;
     }
     echo 'done, found '.count($data['shows']).' shows'.PHP_EOL;
     echo "Total Retries '{$totalRetries}', Total Failed '{$totalFailed}'\n";
-    file_put_contents('eztv.json', json_encode($data, JSON_PRETTY_PRINT |  JSON_UNESCAPED_UNICODE |  JSON_UNESCAPED_SLASHES));
+    file_put_contents($jsonFile, json_encode($data, JSON_PRETTY_PRINT |  JSON_UNESCAPED_UNICODE |  JSON_UNESCAPED_SLASHES));
 }
