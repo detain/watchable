@@ -15,6 +15,10 @@ $sitePrefix = 'http://eztv.re';
 $converter = new CssSelectorConverter();
 $client = new Goutte\Client();
 $jsonFile = 'eztv_shows.json';
+$jsonSmallFile = 'eztv_shows_small.json';
+$dataSmall = [
+    'shows' => []
+];
 if (file_exists($jsonFile)) {
     echo "Loading data...";
     $data = json_decode(file_get_contents($jsonFile),true);
@@ -203,16 +207,25 @@ if ($load['show'] == true) {
                         foreach ($typeData as $typeRow) {
                             if (preg_match('/^([^:]*): (.*)$/ui', $typeRow, $matches)) {
                                 $key = strtolower($matches[1]);
-                                if ($key == 'series premiere')
-                                    $key = 'start_date';
-                                $value = $key == 'genre' ? explode(' | ', $matches[2]) : $matches[2];
-                                $show[$key] = $value;
+                                if ($key == 'series premiere') {
+                                    $start = strtotime($matches[2]);
+                                    $show['start_date'] = $start === false ? $matches[2] : date('Y-m-d', $start);
+                                } elseif ($key == 'genre') {
+                                    $show[$key] = explode(' | ', $matches[2]);
+                                } elseif ($key == 'runtime') {
+                                    $show[$key] = is_null($matches[2]) ? null : intval(explode(' ', $matches[2])[0]);
+                                } else {
+                                    $show[$key] = $matches[2];
+                                }
                             }
                         }
+                    } elseif (substr($type, -8) == 'episodes') {
+                        if (!isset($show['episodes']))
+                            $show['episodes'] = [];
+                        $show['episodes'][$type] = $typeData;
                     } else {
                         $show[$type] = $typeData;
                     }
-
                 }
             }
         }
@@ -228,8 +241,13 @@ if ($load['show'] == true) {
         }
         echo "[{$showIdx}]/{$showCount}] Show {$id}\n ";//.json_encode($show, JSON_PRETTY_PRINT)."\n";
         $data['shows'][$id] = $show;
+        unset($show['torrents']);
+        unset($show['cast']);
+        unset($show['episodes']);
+        $dataSmall['shows'][$id] = $show;
     }
     echo 'done, found '.count($data['shows']).' shows'.PHP_EOL;
     echo "Total Retries '{$totalRetries}', Total Failed '{$totalFailed}'\n";
     file_put_contents($jsonFile, json_encode($data, JSON_PRETTY_PRINT |  JSON_UNESCAPED_UNICODE |  JSON_UNESCAPED_SLASHES));
+    file_put_contents($jsonSmallFile, json_encode($dataSmall, JSON_PRETTY_PRINT |  JSON_UNESCAPED_UNICODE |  JSON_UNESCAPED_SLASHES));
 }
