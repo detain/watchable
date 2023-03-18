@@ -223,7 +223,7 @@ if ($load['show'] == true) {
                         if (!isset($show['episodes']))
                             $show['episodes'] = [];
                         $show['episodes'][$type] = $typeData;
-                    } else {
+                    } elseif (substr($type, 0, 10) != 'additional') {
                         $show[$type] = $typeData;
                     }
                 }
