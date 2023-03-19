@@ -5,6 +5,16 @@ use Symfony\Component\CssSelector\CssSelectorConverter;
 
 require_once __DIR__.'/../../../vendor/autoload.php';
 
+/**
+* limiting:
+*
+* status
+* rating
+* date
+* classification
+* genre
+*/
+
 $load = [
     'torrents' => false,
     'packs' => false,

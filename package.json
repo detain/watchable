@@ -8,6 +8,7 @@
   "license": "GPL-3.0",
   "private": false,
   "dependencies": {
+    "bootstrap-slider": "*",
     "@fortawesome/fontawesome-free": "^5.14.0",
     "axios": "*",
     "bootstrap": "^3",
