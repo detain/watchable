@@ -1,0 +1,44 @@
+<?php
+return [
+	'db' => [
+		'low_priority' => false,
+		'host' => '',
+		'port' => '',
+		'name' => '',
+		'user' => '',
+		'pass' => '',
+	],
+	'screenscraper' => [
+		'api_user' => '',
+		'api_pass' => '',
+		'api_debug_pass' => '',
+	],
+	'anidb' => [
+		'api_key' => '',
+	],
+	'igdb' => [
+		'api_key' => '',
+	],
+	'tmdb' => [
+		'api_key' => '',
+	],
+	'tgdb' => [
+		'public_key' => '',
+		'private_key' => ''
+	],
+	'imgur' => [
+		'client_id' => '',
+		'client_secret' => '',
+	],
+	'lastfm' => [
+		'api_key' => '',
+		'api_secret' => '',
+	],
+	'trakt' => [
+		'client_id' => '',
+		'client_secret' => '',
+	],
+	'ips' => [
+		'',
+	]
+];

@@ -3,27 +3,64 @@
 use Symfony\Component\DomCrawler\Crawler;
 use Symfony\Component\CssSelector\CssSelectorConverter;
 
-require_once __DIR__.'/../../../vendor/autoload.php';
+require_once __DIR__.'/../../bootstrap.php';
 
 /**
-* limiting:
-*
-* status
-* rating
-* date
-* classification
-* genre
+* @var \Workerman\MySQL\Connection
 */
-
+global $db;
+/**
+* @var \Goutte\Client
+*/
+global $client;
 $load = [
-    'torrents' => false,
-    'packs' => false,
+    'torrents' => true,
+    'packs' => true,
     'shows' => true,
     'show' => true,
 ];
 $sitePrefix = 'http://eztv.re';
 $converter = new CssSelectorConverter();
 $client = new Goutte\Client();
+function apiCall($url) {
+    /**
+    * @var \Workerman\MySQL\Connection
+    */
+    global $db;
+    /**
+    * @var \Goutte\Client
+    */
+    global $client;
+    //$key = str_replace(['://', '/'], ['_', '_'], $url);
+    //$response = file_get_contents($url);
+    $return = $db->query("SELECT url, code, type, updated, date_add(updated, interval 1 month) < now() as expired, response FROM watchable.eztv_api_cache where url='http://eztv.re/api/get-torrents?limit=100&page=1' and date_add(updated, INTERVAL 1 MONTH) > now()");
+    if (count($return) == 0 || $return[0]['expired'] == 1) {
+        $crawler = $client->request('GET', $url);
+        $response = $client->getResponse();
+        $code = $response->getStatusCode();
+        $contentType = strtolower(explode(';', $response->getHeader('content-type'))[0]);
+        $responseContent = $response->getContent();
+    } else {
+        $crawler = $client->createCrawlerFromContent($return[0]['url'], $return[0]['response'], $return[0]['type']);
+    }
+    switch ($contentType) {
+        case 'application/json':
+            $return = json_decode($responseContent, true);
+            break;
+        case 'text/html':
+        default:
+            $return = $crawler;
+            //$crawler = $client->createCrawlerFromContent($url, $resoibse, $contentType );
+            break;
+    }
+    $db->query(make_insert_query('eztv_api_cache', [
+        'url' => $url,
+        'code' => $code,
+        'type' => $contentType,
+        'response' => $responseContent
+    ]));
+    return $return;
+};
 $jsonFile = 'eztv_shows.json';
 $jsonSmallFile = 'eztv_shows_small.json';
 $dataSmall = [
@@ -45,7 +82,8 @@ if ($load['torrents'] == true) {
     for ($limit = 100, $pages = 0, $page = 1, $end = false; $end == false; $page++) {
         echo "{$page}/{$pages}, ";
         //$json = json_decode(file_get_contents('http://eztv.re/api/get-torrents?limit=100&page='.$page),true);
-        $json = json_decode(file_get_contents('torrents_page_'.$page.'.json'),true);
+        $json = apiCall('http://eztv.re/api/get-torrents?limit=100&page='.$page);
+        //$json = json_decode(file_get_contents('torrents_page_'.$page.'.json'),true);
         if (!isset($json['torrents_count']))
             continue;
         $pages = ceil($json['torrents_count'] / $limit);
