@@ -5,13 +5,11 @@ use Symfony\Component\CssSelector\CssSelectorConverter;
 
 require_once __DIR__.'/../../bootstrap.php';
 
-/**
-* @var \Workerman\MySQL\Connection
-*/
+/** @var \Workerman\MySQL\Connection */
 global $db;
-/**
-* @var \Goutte\Client
-*/
+/** @var \mysqli */
+global $mysqlLinkId;
+/** @var \Goutte\Client */
 global $client;
 $load = [
     'torrents' => true,
@@ -22,45 +20,6 @@ $load = [
 $sitePrefix = 'http://eztv.re';
 $converter = new CssSelectorConverter();
 $client = new Goutte\Client();
-function apiCall($url) {
-    /**
-    * @var \Workerman\MySQL\Connection
-    */
-    global $db;
-    /**
-    * @var \Goutte\Client
-    */
-    global $client;
-    //$key = str_replace(['://', '/'], ['_', '_'], $url);
-    //$response = file_get_contents($url);
-    $return = $db->query("SELECT url, code, type, updated, date_add(updated, interval 1 month) < now() as expired, response FROM watchable.eztv_api_cache where url='http://eztv.re/api/get-torrents?limit=100&page=1' and date_add(updated, INTERVAL 1 MONTH) > now()");
-    if (count($return) == 0 || $return[0]['expired'] == 1) {
-        $crawler = $client->request('GET', $url);
-        $response = $client->getResponse();
-        $code = $response->getStatusCode();
-        $contentType = strtolower(explode(';', $response->getHeader('content-type'))[0]);
-        $responseContent = $response->getContent();
-    } else {
-        $crawler = $client->createCrawlerFromContent($return[0]['url'], $return[0]['response'], $return[0]['type']);
-    }
-    switch ($contentType) {
-        case 'application/json':
-            $return = json_decode($responseContent, true);
-            break;
-        case 'text/html':
-        default:
-            $return = $crawler;
-            //$crawler = $client->createCrawlerFromContent($url, $resoibse, $contentType );
-            break;
-    }
-    $db->query(make_insert_query('eztv_api_cache', [
-        'url' => $url,
-        'code' => $code,
-        'type' => $contentType,
-        'response' => $responseContent
-    ]));
-    return $return;
-};
 $jsonFile = 'eztv_shows.json';
 $jsonSmallFile = 'eztv_shows_small.json';
 $dataSmall = [
@@ -116,7 +75,7 @@ if ($load['torrents'] == true) {
         }
     }
     echo 'done, found '.count($data['torrents']).' tv series'.PHP_EOL;
-    file_put_contents($jsonFile, json_encode($data, JSON_PRETTY_PRINT |  JSON_UNESCAPED_UNICODE |  JSON_UNESCAPED_SLASHES));
+    //file_put_contents($jsonFile, json_encode($data, JSON_PRETTY_PRINT |  JSON_UNESCAPED_UNICODE |  JSON_UNESCAPED_SLASHES));
 }
 if ($load['packs'] == true) {
     echo 'Loading Packs:';
@@ -147,7 +106,7 @@ if ($load['packs'] == true) {
         }
     }
     echo 'done, found '.count($data['packs']).' tv packs'.PHP_EOL;
-    file_put_contents($jsonFile, json_encode($data, JSON_PRETTY_PRINT |  JSON_UNESCAPED_UNICODE |  JSON_UNESCAPED_SLASHES));
+    //file_put_contents($jsonFile, json_encode($data, JSON_PRETTY_PRINT |  JSON_UNESCAPED_UNICODE |  JSON_UNESCAPED_SLASHES));
 }
 if ($load['shows'] == true) {
     echo 'Loading Shows:';
@@ -170,7 +129,7 @@ if ($load['shows'] == true) {
         $data['shows'][$id] = $show;
     }
     echo 'done, found '.count($data['shows']).' tv series'.PHP_EOL;
-    file_put_contents($jsonFile, json_encode($data, JSON_PRETTY_PRINT |  JSON_UNESCAPED_UNICODE |  JSON_UNESCAPED_SLASHES));
+    //file_put_contents($jsonFile, json_encode($data, JSON_PRETTY_PRINT |  JSON_UNESCAPED_UNICODE |  JSON_UNESCAPED_SLASHES));
 }
 if ($load['show'] == true) {
     /*
@@ -296,6 +255,76 @@ if ($load['show'] == true) {
     }
     echo 'done, found '.count($data['shows']).' shows'.PHP_EOL;
     echo "Total Retries '{$totalRetries}', Total Failed '{$totalFailed}'\n";
-    file_put_contents($jsonFile, json_encode($data, JSON_PRETTY_PRINT |  JSON_UNESCAPED_UNICODE |  JSON_UNESCAPED_SLASHES));
-    file_put_contents($jsonSmallFile, json_encode($dataSmall, JSON_PRETTY_PRINT |  JSON_UNESCAPED_UNICODE |  JSON_UNESCAPED_SLASHES));
+    //file_put_contents($jsonFile, json_encode($data, JSON_PRETTY_PRINT |  JSON_UNESCAPED_UNICODE |  JSON_UNESCAPED_SLASHES));
+    //file_put_contents($jsonSmallFile, json_encode($dataSmall, JSON_PRETTY_PRINT |  JSON_UNESCAPED_UNICODE |  JSON_UNESCAPED_SLASHES));
 }
+
+
+
+function apiCall($url) {
+    /**
+    * @var \Workerman\MySQL\Connection
+    */
+    global $db;
+    /**
+    * @var \mysqli
+    */
+    global $mysqlLinkId;
+    /**
+    * @var \Goutte\Client
+    */
+    global $client;
+    //$key = str_replace(['://', '/'], ['_', '_'], $url);
+    //$response = file_get_contents($url);
+    $expireMonths = 1;
+    $return = $db->query("SELECT url, code, type, updated, date_add(updated, interval {$expireMonths} month) < now() as expired, response FROM watchable.eztv_api_cache where url='".$mysqlLinkId->real_escape_string($url)."' and date_add(updated, INTERVAL {$expireMonths} MONTH) > now()");
+    if (count($return) == 0 || $return[0]['expired'] == 1) {
+        $crawler = $client->request('GET', $url);
+        $response = $client->getResponse();
+        $code = $response->getStatusCode();
+        $contentType = strtolower(explode(';', $response->getHeader('content-type'))[0]);
+        $responseContent = $response->getContent();
+        if (count($return) == 0) {
+            echo "Adding New Data for {$url}\n";
+            $db->insert('eztv_api_cache')
+                ->cols(['url', 'code', 'type', 'response'])
+                ->set('updated', 'NOW()')
+                ->bindValues([
+                    'url' => $url,
+                    'code' => $code,
+                    'type' => $contentType,
+                    'response' => $responseContent
+                ])->query();
+        } else {
+            echo "Replacing Expired Data for {$url}\n";
+            $db->update('eztv_api_cache')
+                ->cols(['code', 'type', 'response'])
+                ->set('updated', 'NOW()')
+                ->where('url = :url')
+                ->bindValues([
+                    'code' => $code,
+                    'type' => $contentType,
+                    'response' => $responseContent,
+                    'url' => $url
+                ])->query();
+        }
+    } else {
+        echo "Using Cached Data for {$url}\n";
+        $code = $return[0]['code'];
+        $contentType = $return[0]['type'];
+        $responseContent = $return[0]['response'];
+        $crawler = new Crawler(null, $url);
+        $crawler->addContent($responseContent, $contentType);
+    }
+    switch ($contentType) {
+        case 'application/json':
+            $return = json_decode($responseContent, true);
+            break;
+        case 'text/html':
+        default:
+            $return = $responseContent;
+            //$crawler = $client->createCrawlerFromContent($url, $resoibse, $contentType );
+            break;
+    }
+    return $return;
+};
