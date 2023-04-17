@@ -1,16 +1,63 @@
 <?php
+/*
 
+* Documentation Links
+
+      [The BrowserKit Component (Symfony Docs)](https://symfony.com/doc/current/components/browser_kit.html)
+      [The CssSelector Component (Symfony Docs)](https://symfony.com/doc/current/components/css_selector.html)
+      [The DomCrawler Component (Symfony Docs)](https://symfony.com/doc/current/components/dom_crawler.html)
+      [HTTP Client (Symfony Docs)](https://symfony.com/doc/current/http_client.html)
+
+* URLs to support
+
+      /shows/$id/$seo/
+      /showlist/
+      /api/get-torrents?limit=100&page=$page
+      /cat/tv-packs-1/page_$page
+
+* TODO
+
+      /shows/ still has 2 items left
+          parsing the episodes
+          parsing the per-episode tvmaze lniks form the torrent list
+      /ep/$id/$seo/
+          screenshot from right side
+          episode / ep ssummary
+          episode air date
+          season #
+          episode #
+      Store the records in mysql
+      Write a Scraper for TVMaze
+
+*/
+
+use Symfony\Component\BrowserKit\Cookie;
+use Symfony\Component\BrowserKit\CookieJar;
+use Symfony\Component\BrowserKit\HttpBrowser;
 use Symfony\Component\DomCrawler\Crawler;
-use Symfony\Component\CssSelector\CssSelectorConverter;
+use Symfony\Component\HttpClient\CachingHttpClient;
+use Symfony\Component\HttpClient\HttpClient;
+use Symfony\Component\HttpKernel\HttpCache\Store;
 
 require_once __DIR__.'/../../bootstrap.php';
+require_once __DIR__.'/FakeCacheHeaderClient.php';
 
 /** @var \Workerman\MySQL\Connection */
 global $db;
 /** @var \mysqli */
 global $mysqlLinkId;
-/** @var \Goutte\Client */
+/** @var \Symfony\Component\BrowserKit\HttpBrowser */
 global $client;
+
+$client = new HttpBrowser(
+    $cachingClient = new CachingHttpClient(
+        $fakeClient = new FakeCacheHeaderClient(
+            $httpClient = HttpClient::create(['timeout' => 900, 'verify_peer' => false]
+        )),
+        $cacheStore = new Store(__DIR__.'/../../../data/http_cache/eztv'), ['default_ttl' => 2678400]),
+    null,
+    $cookieJar = new CookieJar()
+);
 $load = [
     'torrents' => true,
     'packs' => true,
@@ -18,9 +65,7 @@ $load = [
     'show' => true,
 ];
 $sitePrefix = 'http://eztv.re';
-$converter = new CssSelectorConverter();
-$client = new Goutte\Client();
-$jsonFile = 'eztv_shows.json';
+$jsonFile = 'eztv.json';
 $jsonSmallFile = 'eztv_shows_small.json';
 $dataSmall = [
     'shows' => []
@@ -36,15 +81,41 @@ if (file_exists($jsonFile)) {
         'torrents' => [],
     ];
 }
+if ($load['shows'] == true) {
+    echo 'Loading Shows:';
+    [$code, $contentType, $crawler] = apiCall($sitePrefix.'/showlist/');
+    $rows = $crawler->filter('.forum_header_border tr');
+    echo "Adding ".$rows->count()." Shows";
+    for ($idx = 4, $maxIdx = $rows->count(); $idx < $maxIdx; $idx++) {
+        $row = $rows->eq($idx);
+        $td = $row->filter('td');
+        $href = explode('/', $td->filter('a')->attr('href'));
+        $id = intval($href[2]);
+        $show = [
+            'name' => $td->filter('a')->text(),
+            'seo' => $href[3],
+            'status' => $td->filter('font')->attr('class'),
+            'rating' => floatval($td->filter('b')->text()),
+            'votes' => intval(preg_replace('/[^0-9]/', '', $td->filter('span')->text()))
+        ];
+        echo "Adding Show {$id} ".json_encode($show)."\n";
+        $data['shows'][$id] = $show;
+    }
+    echo 'done, found '.count($data['shows']).' tv series'.PHP_EOL;
+    file_put_contents('eztv_shows.json', json_encode($data['shows'], JSON_PRETTY_PRINT |  JSON_UNESCAPED_UNICODE |  JSON_UNESCAPED_SLASHES));
+    file_put_contents($jsonFile, json_encode($data, JSON_PRETTY_PRINT |  JSON_UNESCAPED_UNICODE |  JSON_UNESCAPED_SLASHES));
+}
 if ($load['torrents'] == true) {
     echo 'Loading Torrents:';
     for ($limit = 100, $pages = 0, $page = 1, $end = false; $end == false; $page++) {
         echo "{$page}/{$pages}, ";
         //$json = json_decode(file_get_contents('http://eztv.re/api/get-torrents?limit=100&page='.$page),true);
-        $json = apiCall('http://eztv.re/api/get-torrents?limit=100&page='.$page);
+        [$code, $contentType, $json] = apiCall('http://eztv.re/api/get-torrents?limit=100&page='.$page);
         //$json = json_decode(file_get_contents('torrents_page_'.$page.'.json'),true);
-        if (!isset($json['torrents_count']))
+        if (!isset($json['torrents_count'])) {
+            echo "No torrent_count, skipping page {$page}\n";
             continue;
+        }
         $pages = ceil($json['torrents_count'] / $limit);
         $end = $page >= $pages;
         echo "Adding ".count($json['torrents'])." Torrents";
@@ -75,12 +146,13 @@ if ($load['torrents'] == true) {
         }
     }
     echo 'done, found '.count($data['torrents']).' tv series'.PHP_EOL;
-    //file_put_contents($jsonFile, json_encode($data, JSON_PRETTY_PRINT |  JSON_UNESCAPED_UNICODE |  JSON_UNESCAPED_SLASHES));
+    file_put_contents('eztv_torrents.json', json_encode($data['torrents'], JSON_PRETTY_PRINT |  JSON_UNESCAPED_UNICODE |  JSON_UNESCAPED_SLASHES));
+    file_put_contents($jsonFile, json_encode($data, JSON_PRETTY_PRINT |  JSON_UNESCAPED_UNICODE |  JSON_UNESCAPED_SLASHES));
 }
 if ($load['packs'] == true) {
     echo 'Loading Packs:';
     for ($page = 1, $end = false; $end == false; $page++) {
-        $crawler = $client->request('GET', $sitePrefix.'/cat/tv-packs-1/page_'.$page);
+        [$code, $contentType, $crawler] = apiCall($sitePrefix.'/cat/tv-packs-1/page_'.$page);
         $end = $crawler->filter("#header_holder table")->eq(4)->filter('td')->eq(1)->html() == '';
         $rows = $crawler->filter("#header_holder table")->eq(5)->filter('tr');
         echo " [{$page}] Adding ".$rows->count()." Packs";
@@ -88,48 +160,30 @@ if ($load['packs'] == true) {
             $row = $rows->eq($idx);
             $td = $row->filter('td');
             //echo $td->eq(2)->html()."\n".$td->count()."\n".$td->eq(2)->filter('a')->count();
+            if ($td->count() == 0)
+                die('Empty TD Nodes');
             $href = explode('/', $td->eq(0)->filter('a')->attr('href'));
             $id = intval($href[2]);
             $sizeParts = explode(' ', $td->eq(3)->text());
             $pack = [
                 'name' => preg_replace('/ \[eztv\]$/', '', $td->eq(1)->filter('a')->text()),
                 'seo' => $href[3],
-                'size' => ceil(floatval($sizeParts[0]) * ($sizeParts[1] == 'MB' ? 1048576 : 1073741824)),
                 'seeds' => $td->eq(5)->text() == '-' ? 0 : intval($td->eq(5)->text()),
                 'torrent_id' => intval(explode('/', $td->eq(1)->filter('a')->attr('href'))[2]),
                 'magnet' => $td->eq(2)->filter('a')->eq(0)->attr('href')
             ];
-            if ($td->eq(2)->filter('a')->count() == 2)
-                $pack['torrent'] = $td->eq(2)->filter('a')->eq(1)->attr('href');
+            if ($td->count() > 0) {
+                $pack['size'] = ceil(floatval($sizeParts[0]) * ($sizeParts[1] == 'MB' ? 1048576 : 1073741824));
+                if ($td->eq(2)->filter('a')->count() == 2)
+                    $pack['torrent'] = $td->eq(2)->filter('a')->eq(1)->attr('href');
+            }
             //echo "Adding Pack {$id} ".json_encode($pack, JSON_PRETTY_PRINT)."\n";
             $data['packs'][$id] = $pack;
         }
     }
     echo 'done, found '.count($data['packs']).' tv packs'.PHP_EOL;
-    //file_put_contents($jsonFile, json_encode($data, JSON_PRETTY_PRINT |  JSON_UNESCAPED_UNICODE |  JSON_UNESCAPED_SLASHES));
-}
-if ($load['shows'] == true) {
-    echo 'Loading Shows:';
-    $crawler = $client->request('GET', $sitePrefix.'/showlist/');
-    $rows = $crawler->filter('.forum_header_border tr');
-    echo "Adding ".$rows->count()." Shows";
-    for ($idx = 4, $maxIdx = $rows->count(); $idx < $maxIdx; $idx++) {
-        $row = $rows->eq($idx);
-        $td = $row->filter('td');
-        $href = explode('/', $td->filter('a')->attr('href'));
-        $id = intval($href[2]);
-        $show = [
-            'name' => $td->filter('a')->text(),
-            'seo' => $href[3],
-            'status' => $td->filter('font')->attr('class'),
-            'rating' => floatval($td->filter('b')->text()),
-            'votes' => intval(preg_replace('/[^0-9]/', '', $td->filter('span')->text()))
-        ];
-        //echo "Adding Show {$id} ".json_encode($show)."\n";
-        $data['shows'][$id] = $show;
-    }
-    echo 'done, found '.count($data['shows']).' tv series'.PHP_EOL;
-    //file_put_contents($jsonFile, json_encode($data, JSON_PRETTY_PRINT |  JSON_UNESCAPED_UNICODE |  JSON_UNESCAPED_SLASHES));
+    file_put_contents('eztv_packs.json', json_encode($data['packs'], JSON_PRETTY_PRINT |  JSON_UNESCAPED_UNICODE |  JSON_UNESCAPED_SLASHES));
+    file_put_contents($jsonFile, json_encode($data, JSON_PRETTY_PRINT |  JSON_UNESCAPED_UNICODE |  JSON_UNESCAPED_SLASHES));
 }
 if ($load['show'] == true) {
     /*
@@ -155,8 +209,7 @@ if ($load['show'] == true) {
             continue;
         }
         $url = $sitePrefix.'/shows/'.$id.'/'.$show['seo'].'/';
-        $crawler = $client->request('GET', $url);
-        $code = $client->getResponse()->getStatusCode();
+        [$code, $contentType, $crawler] = apiCall($url);
         if ($code != 200) {
             while ($code != 200 && $tries < $maxTries) {
                 echo "URL {$url} got error code {$code}, retry {$tries}/{$maxTries} tries after a {$tryDelay}sec delay...";
@@ -164,8 +217,7 @@ if ($load['show'] == true) {
                 echo "woke up, retrying\n";
                 $tries++;
                 $totalRetries++;
-                $crawler = $client->request('GET', $url);
-                $code = $client->getResponse()->getStatusCode();
+                [$code, $contentType, $crawler] = apiCall($url);
             }
             if ($code != 200) {
                 echo "Couldnt get URL {$url} after {$tries} attempts, skipping!\n";
@@ -255,10 +307,21 @@ if ($load['show'] == true) {
     }
     echo 'done, found '.count($data['shows']).' shows'.PHP_EOL;
     echo "Total Retries '{$totalRetries}', Total Failed '{$totalFailed}'\n";
-    //file_put_contents($jsonFile, json_encode($data, JSON_PRETTY_PRINT |  JSON_UNESCAPED_UNICODE |  JSON_UNESCAPED_SLASHES));
-    //file_put_contents($jsonSmallFile, json_encode($dataSmall, JSON_PRETTY_PRINT |  JSON_UNESCAPED_UNICODE |  JSON_UNESCAPED_SLASHES));
+    file_put_contents($jsonFile, json_encode($data, JSON_PRETTY_PRINT |  JSON_UNESCAPED_UNICODE |  JSON_UNESCAPED_SLASHES));
+    file_put_contents('eztv_shows.json', json_encode($data['shows'], JSON_PRETTY_PRINT |  JSON_UNESCAPED_UNICODE |  JSON_UNESCAPED_SLASHES));
+    file_put_contents($jsonSmallFile, json_encode($dataSmall, JSON_PRETTY_PRINT |  JSON_UNESCAPED_UNICODE |  JSON_UNESCAPED_SLASHES));
 }
 
+$dataSmall = [];
+foreach ($data as $type => $typeData) {
+    $dataSmall[$type] = [];
+    for ($idx = 0, $idxMax = 10, $typeKeys = array_keys($typeData); $idx < $idxMax; $idx++) {
+        $key = $typeKeys[$idx];
+        $value = $typeData[$key];
+        $dataSmall[$type][$key] = $value;
+    }
+}
+file_put_contents('eztv_small.json', json_encode($dataSmall, JSON_PRETTY_PRINT |  JSON_UNESCAPED_UNICODE |  JSON_UNESCAPED_SLASHES));
 
 
 function apiCall($url) {
@@ -271,19 +334,23 @@ function apiCall($url) {
     */
     global $mysqlLinkId;
     /**
-    * @var \Goutte\Client
+    * @var \Symfony\Component\BrowserKit\HttpBrowser
     */
     global $client;
     //$key = str_replace(['://', '/'], ['_', '_'], $url);
     //$response = file_get_contents($url);
     $expireMonths = 1;
+    /*
     $return = $db->query("SELECT url, code, type, updated, date_add(updated, interval {$expireMonths} month) < now() as expired, response FROM watchable.eztv_api_cache where url='".$mysqlLinkId->real_escape_string($url)."' and date_add(updated, INTERVAL {$expireMonths} MONTH) > now()");
     if (count($return) == 0 || $return[0]['expired'] == 1) {
+    */
         $crawler = $client->request('GET', $url);
         $response = $client->getResponse();
         $code = $response->getStatusCode();
         $contentType = strtolower(explode(';', $response->getHeader('content-type'))[0]);
-        $responseContent = $response->getContent();
+        $responseContent = cleanUtf8($response->getContent());
+    /*
+        //var_export(['code' => $code, 'type' => $contentType, 'response' => $responseContent, 'url' => $url]);
         if (count($return) == 0) {
             echo "Adding New Data for {$url}\n";
             $db->insert('eztv_api_cache')
@@ -308,23 +375,68 @@ function apiCall($url) {
                     'url' => $url
                 ])->query();
         }
+
     } else {
-        echo "Using Cached Data for {$url}\n";
         $code = $return[0]['code'];
         $contentType = $return[0]['type'];
         $responseContent = $return[0]['response'];
-        $crawler = new Crawler(null, $url);
-        $crawler->addContent($responseContent, $contentType);
+        echo "Using Cached Data for {$url} {$code} {$contentType}\n";
     }
+    */
     switch ($contentType) {
         case 'application/json':
             $return = json_decode($responseContent, true);
             break;
         case 'text/html':
         default:
-            $return = $responseContent;
-            //$crawler = $client->createCrawlerFromContent($url, $resoibse, $contentType );
+            //$crawler = new Crawler(null, $url);
+            //$crawler->addContent($responseContent, $contentType);
+            //$crawler = $client->createCrawlerFromContent($url, $responseContent, $contentType );
+            $return = $crawler;
             break;
     }
-    return $return;
+    return [$code, $contentType, $return];
 };
+
+
+
+
+
+
+
+
+
+
+$crawler = $client->request('GET', 'https://eztv.re/ep/1416440/doctors-s21e60-720p-hdtv-x264-norite/');
+// Extract episode summary
+$episodeSummary = $crawler->filter('.panel-heading')->text();
+// Extract season and episode number
+$seasonEpisodeNumber = $crawler->filter('.breadcrumb li:nth-child(4)')->text();
+// Extract screenshots
+$screenshots = $crawler->filter('.screenshot-thumbnail img')->each(function ($node) {
+    return $node->attr('src');
+});
+// Extract episode title
+$episodeTitle = $crawler->filter('.section-content .epinfo h1')->text();
+// Extract show title
+$showTitle = $crawler->filter('.section-content .epinfo h2 a')->text();
+// Extract release date
+$releaseDate = $crawler->filter('.section-content .epinfo span:contains("Released")')->siblings()->text();
+// Extract magnet link
+$magnetLink = $crawler->filter('.section-content .download-box a[href^="magnet:"]')->attr('href');
+
+
+$crawler = $client->request('GET', 'https://eztv.re/shows/498355/canadas-ultimate-challenge/');
+// Extract torrents
+$torrents = $crawler->filter('#main > table > tbody > tr')->each(function ($row) {
+    $cells = $row->filter('td');
+    $torrent = [
+        'title' => $cells->eq(1)->text(),
+        'magnetLink' => $cells->eq(2)->filter('a[href^="magnet:"]')->attr('href'),
+    ];
+    return $torrent;
+});
+// Extract per-episode TVMaze links
+$links = $crawler->filter('.episodes .epinfo a')->each(function ($node) {
+    return $node->attr('href');
+});
