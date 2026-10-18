@@ -10,7 +10,7 @@
   "dependencies": {
     "@fortawesome/fontawesome-free": "^5.14.0",
     "axios": "*",
-    "bootstrap": "^3",
+    "bootstrap": "^5",
     "bootstrap-slider": "*",
     "datatables.net-autofill-bs": "^*",
     "datatables.net-bs": "^*",
